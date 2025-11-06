@@ -279,9 +279,9 @@ def main(snapshot_index):
             '005376','005529','005632','005795','005888','006069','006144','006350','006390','006400','006640','006656',\
             '006912','006937','007168','007212','007241','007394','007424','007552','007680','007779','007869','007936',\
             '008192']  
-    hdf5_path = "/home/vidasz/scratch/DualAGNs/Datasets/HaloBH-TangosPynbodyMap-R25-snap{}.hdf5"
-    output_path = "/home/vidasz/scratch/DualAGNs/Datasets/Catalogue/DualAGN-Catalog-R25-z{:.2f}.pkl"
-    sim_path = "/home/vidasz/projects/rrg-babul-ad/SHARED/Romulus/cosmo25/"
+    hdf5_path = "/scratch/stlock/tripleAGNs/halomap_files/HaloBH-TangosPynbodyMap-R25-snap{}.hdf5"
+    output_path = "/scratch/stlock/dualAGNs/datasets/catalogue/TripleAGN-Catalog-R100-z{:.2f}.pkl"
+    sim_path = "/home/stlock/projects/rrg-babul-ad/SHARED/Romulus/cosmo25/"
 
     print('loading snapshots')
     s, snap, z, t_now = load_snapshot(snapshot_index, snapshot_list, sim_path)
