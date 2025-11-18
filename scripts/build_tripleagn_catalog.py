@@ -99,8 +99,8 @@ def compute_bh_local_env(sim, pos, t_now, t_prev):
 ##############################################
 #print('STEP 5: Identify triple AGNs')
 ##############################################
-def find_triple_agn_systems(df, sim, t_now, t_prev, separation_threshold=50, mdot_threshold=1.89e-3):
-    print('step 5')
+def find_triple_agn_systems(df, sim, t_now, t_prev, separation_threshold=30, mdot_threshold=1.89e-3):
+    print('step 5: Finding triple AGN systems')
 
     # --- Compute Lbol and Ledd for ALL BHs upfront ---
     df = df.copy()  # to safely add new columns
@@ -113,47 +113,69 @@ def find_triple_agn_systems(df, sim, t_now, t_prev, separation_threshold=50, mdo
     df['BH_Lbol'] = 0.1 * df['BH_mdot'] * msun_to_g / yr_to_s * c_cgs**2
     df['BH_Ledd'] = 1.26e38 * df['BH_mass']
 
-    # --- Select only BHs that meet the AGN threshold (changed to 1e40) ---
-    main_bhs = df[df['BH_Lbol'] > 1e40].copy()
-    triples = []
+    # --- Select only BHs that meet the AGN threshold ---
+    agn_bhs = df[df['BH_Lbol'] > 1e43].copy()
+    
+    print(f"Total AGNs found: {len(agn_bhs)}")
+    
+    # Track which BHs have been assigned to a system
+    assigned_bhs = set()
+    triple_systems = []
 
-    for _, bh in main_bhs.iterrows():
+    # Iterate through all AGN BHs to find triple systems
+    for idx, bh in agn_bhs.iterrows():
+        # Skip if this BH is already in a system
+        if bh['BH_id'] in assigned_bhs:
+            continue
+            
         bh_pos = np.array([bh['BH_x'], bh['BH_y'], bh['BH_z']])
+        
+        # Calculate distances to all other BHs
         deltas = df[['BH_x', 'BH_y', 'BH_z']].values - bh_pos
         distances = np.linalg.norm(deltas, axis=1)
 
-        # Select neighbor BHs that are also AGN and not the same as current BH
+        # Select neighbor BHs that are also AGN, not assigned, and not the current BH
         neighbors = df[(distances < separation_threshold) & 
+                       (df['BH_Lbol'] > 1e43) &
                        (df['BH_mdot'] > mdot_threshold) & 
-                       (df['BH_id'] != bh['BH_id'])]
+                       (df['BH_id'] != bh['BH_id']) &
+                       (~df['BH_id'].isin(assigned_bhs))]
 
-        if len(neighbors) > 2:
-            print(f'More than 2 AGN neighbors detected near BH {bh["BH_id"]}, taking closest 2')
-            # Sort by distance and take the 2 closest
-            neighbor_distances = np.linalg.norm(neighbors[['BH_x', 'BH_y', 'BH_z']].values - bh_pos, axis=1)
-            neighbors = neighbors.iloc[np.argsort(neighbor_distances)[:2]]
-        elif len(neighbors) == 2:
+        # Check if we have exactly 2 neighbors (triple system)
+        if len(neighbors) == 2:
+            print(f'Triple AGN system detected around BH {bh["BH_id"]}')
+            
             neighbor1 = neighbors.iloc[0]
             neighbor2 = neighbors.iloc[1]
-
-            # Calculate separations for neighbor 1
+            
+            # Mark all three BHs as assigned
+            assigned_bhs.add(bh['BH_id'])
+            assigned_bhs.add(neighbor1['BH_id'])
+            assigned_bhs.add(neighbor2['BH_id'])
+            
+            # Compute separations
             dx1 = bh['BH_x'] - neighbor1['BH_x']
             dy1 = bh['BH_y'] - neighbor1['BH_y']
             dz1 = bh['BH_z'] - neighbor1['BH_z']
             separation_3d_1 = np.sqrt(dx1**2 + dy1**2 + dz1**2)
             separation_2d_1 = np.sqrt(dx1**2 + dy1**2)
-
-            # Calculate separations for neighbor 2
+            
             dx2 = bh['BH_x'] - neighbor2['BH_x']
             dy2 = bh['BH_y'] - neighbor2['BH_y']
             dz2 = bh['BH_z'] - neighbor2['BH_z']
             separation_3d_2 = np.sqrt(dx2**2 + dy2**2 + dz2**2)
             separation_2d_2 = np.sqrt(dx2**2 + dy2**2)
-
-            # Compute environments for main BH
+            
+            # Separation between the two neighbors
+            dx12 = neighbor1['BH_x'] - neighbor2['BH_x']
+            dy12 = neighbor1['BH_y'] - neighbor2['BH_y']
+            dz12 = neighbor1['BH_z'] - neighbor2['BH_z']
+            separation_3d_12 = np.sqrt(dx12**2 + dy12**2 + dz12**2)
+            separation_2d_12 = np.sqrt(dx12**2 + dy12**2)
+            
+            # Compute local environments
             bh_env = compute_bh_local_env(sim, bh_pos, t_now, t_prev)
             
-            # Compute environments for neighbor 1
             neighbor1_env = compute_bh_local_env(
                 sim,
                 [neighbor1['BH_x'], neighbor1['BH_y'], neighbor1['BH_z']],
@@ -161,8 +183,7 @@ def find_triple_agn_systems(df, sim, t_now, t_prev, separation_threshold=50, mdo
                 t_prev
             )
             neighbor1_env = {f'Neighbour1{key}': val for key, val in neighbor1_env.items()}
-
-            # Compute environments for neighbor 2
+            
             neighbor2_env = compute_bh_local_env(
                 sim,
                 [neighbor2['BH_x'], neighbor2['BH_y'], neighbor2['BH_z']],
@@ -170,27 +191,42 @@ def find_triple_agn_systems(df, sim, t_now, t_prev, separation_threshold=50, mdo
                 t_prev
             )
             neighbor2_env = {f'Neighbour2{key}': val for key, val in neighbor2_env.items()}
-
-            # Prepare neighbor 1 data
-            neighbor1_dict = {f'Neighbour1{col}': neighbor1[col] for col in df.columns if col.startswith('BH_') or col == 'BH_id'}
+            
+            # Create dictionaries for neighbors
+            neighbor1_dict = {f'Neighbour1{col}': neighbor1[col] for col in df.columns 
+                            if col.startswith('BH_') or col == 'BH_id'}
             neighbor1_dict.update({
-                'Separation_3D_kpc_1': separation_3d_1,
-                'Separation_2D_kpc_1': separation_2d_1,
+                'Separation_3D_1_kpc': separation_3d_1,
+                'Separation_2D_1_kpc': separation_2d_1,
                 'Neighbour1BH_pynbody_haloid': neighbor1['pynbody_haloid']
             })
-
-            # Prepare neighbor 2 data
-            neighbor2_dict = {f'Neighbour2{col}': neighbor2[col] for col in df.columns if col.startswith('BH_') or col == 'BH_id'}
+            
+            neighbor2_dict = {f'Neighbour2{col}': neighbor2[col] for col in df.columns 
+                            if col.startswith('BH_') or col == 'BH_id'}
             neighbor2_dict.update({
-                'Separation_3D_kpc_2': separation_3d_2,
-                'Separation_2D_kpc_2': separation_2d_2,
+                'Separation_3D_2_kpc': separation_3d_2,
+                'Separation_2D_2_kpc': separation_2d_2,
                 'Neighbour2BH_pynbody_haloid': neighbor2['pynbody_haloid']
             })
+            
+            # Add separation between neighbors
+            cross_separation_dict = {
+                'Separation_3D_12_kpc': separation_3d_12,
+                'Separation_2D_12_kpc': separation_2d_12
+            }
+            
+            # Combine all data
+            triple_system = {**bh.to_dict(), **bh_env, 
+                           **neighbor1_dict, **neighbor1_env,
+                           **neighbor2_dict, **neighbor2_env,
+                           **cross_separation_dict}
+            triple_systems.append(triple_system)
+            
+        elif len(neighbors) > 2:
+            print(f'More than 2 AGN neighbors ({len(neighbors)}) detected near BH {bh["BH_id"]} - skipping')
 
-            triple = {**bh.to_dict(), **bh_env, **neighbor1_dict, **neighbor1_env, **neighbor2_dict, **neighbor2_env}
-            triples.append(triple)
-
-    return pd.DataFrame(triples)
+    print(f"Total triple AGN systems found: {len(triple_systems)}")
+    return pd.DataFrame(triple_systems)
 
 ##############################################
 # STEP 6: Compute halo properties (main and neighbors)
@@ -199,17 +235,24 @@ def compute_halo_environment_properties(sim, halo_ids, t_now, t_prev):
     print('step6')
     h = sim.halos(ahf_mpi=True)
     results = []
-    
-    # Filter out invalid halo IDs (0, negative, or NaN)
-    valid_halo_ids = [hid for hid in halo_ids if hid > 0 and not np.isnan(hid)]
-    
-    if len(valid_halo_ids) == 0:
-        print("WARNING: No valid halo IDs to process (all IDs were 0, negative, or NaN)")
-        return pd.DataFrame()  # Return empty DataFrame
 
-    print(f"Processing {len(valid_halo_ids)} valid halo IDs out of {len(halo_ids)} total")
+    # sanitize halo_ids: drop NaN, ensure integers and unique
+    try:
+        halo_ids_arr = np.asarray(halo_ids)
+    except Exception:
+        halo_ids_arr = np.array(list(halo_ids))
 
-    for haloid in valid_halo_ids:
+    # drop NaNs and convert to ints
+    halo_ids_clean = []
+    for x in np.unique(halo_ids_arr):
+        if pd.isna(x):
+            continue
+        try:
+            halo_ids_clean.append(int(x))
+        except Exception:
+            continue
+
+    for haloid in halo_ids_clean:
         try:
             center = pnb.analysis.halo.center(h[haloid], mode='pot', retcen=True).in_units('kpc')
             virovdens = cos.Delta_vir(sim)
@@ -240,7 +283,7 @@ def compute_halo_environment_properties(sim, halo_ids, t_now, t_prev):
             subgal = h[haloid][pnb.filt.Sphere(Rgal, center)]
 
             results.append({
-                'Halo_id': haloid,
+                'Halo_id': int(haloid),
                 'Halo_center_x': center[0],
                 'Halo_center_y': center[1],
                 'Halo_center_z': center[2],
@@ -270,22 +313,31 @@ def compute_halo_environment_properties(sim, halo_ids, t_now, t_prev):
         except Exception as e:
             print(f"Failed halo {haloid}: {e}")
 
-    # Handle case where no halos were successfully processed
-    if len(results) == 0:
-        print("WARNING: No halos were successfully processed - all attempts failed")
-        return pd.DataFrame()
-    
-    print(f"Successfully processed {len(results)} out of {len(valid_halo_ids)} valid halos")
-    return pd.DataFrame(results).drop_duplicates('Halo_id').set_index('Halo_id')
+    df = pd.DataFrame(results)
 
+    if df.empty:
+        # return empty dataframe with expected index name
+        return pd.DataFrame(columns=['Halo_id']).set_index('Halo_id')
+    else:
+        return df.drop_duplicates('Halo_id').set_index('Halo_id')
+
+        
 ##############################################
 #'STEP 7: Merge AGN catalog with halo properties (main + 2 neighbors)')
 ##############################################
 def merge_agn_with_halos(agn_df, halo_df):
     print('step 7')
+    # Merge main BH halo properties
     df = pd.merge(agn_df, halo_df, how='left', left_on='pynbody_haloid', right_index=True)
-    df = pd.merge(df, halo_df.add_prefix('Neighbour1Halo_'), how='left', left_on='Neighbour1BH_pynbody_haloid', right_index=True)
-    df = pd.merge(df, halo_df.add_prefix('Neighbour2Halo_'), how='left', left_on='Neighbour2BH_pynbody_haloid', right_index=True)
+    
+    # Merge neighbor 1 halo properties
+    df = pd.merge(df, halo_df.add_prefix('Neighbour1Halo_'), how='left', 
+                  left_on='Neighbour1BH_pynbody_haloid', right_index=True)
+    
+    # Merge neighbor 2 halo properties
+    df = pd.merge(df, halo_df.add_prefix('Neighbour2Halo_'), how='left', 
+                  left_on='Neighbour2BH_pynbody_haloid', right_index=True)
+    
     return df
 
 ##############################################
@@ -313,9 +365,6 @@ def save_triple_agn_catalog(df, output_path_template, z):
 ##############################################
 # MAIN EXECUTION FLOW
 ##############################################
-##############################################
-# MAIN EXECUTION FLOW
-##############################################
 def main(snapshot_index):
     snapshot_list = ['000098','000105','000111','000118','000126','000134','000142','000151','000160','000170','000181',\
             '000192','000204','000216','000229','000243','000256','000258','000274','000290','000308',\
@@ -323,15 +372,15 @@ def main(snapshot_index):
             '000463','000491','000512','000520','000547','000551','000584','000618','000655',\
             '000690','000694','000735','000768','000778','000824','000873','000909','000924','000979','001024',\
             '001036','001065','001097','001162','001230','001270','001280',\
-            '001302','001378','001458','001536','001543','001550','001632','001726','001792','001826','001931','001945',\
+            '001302','001378','001458','001536','001543','001550','001632','001726','01792','001826','001931','001945',\
             '002042','002048','002159','002281','002304','002411','002536','002547','002560','002690','002816','002840',\
             '002998','003072','003163','003328','003336','003478','003517','003584','003707','003840','003905','004096',\
             '004111','004173','004326','004352','004549','004608','004781','004864','005022','005107','005120','005271',\
             '005376','005529','005632','005795','005888','006069','006144','006350','006390','006400','006640','006656',\
             '006912','006937','007168','007212','007241','007394','007424','007552','007680','007779','007869','007936',\
             '008192']  
-    hdf5_path = "/scratch/stlock/tripleAGNs/halomap_files/HaloBH-TangosPynbodyMap-R25-snap{}.hdf5"
-    output_path = "/scratch/stlock/tripleAGNs/datasets/catalogue_50kpc_40lum/TripleAGN-Catalog-R100-z{:.2f}.pkl"
+    hdf5_path = "/scratch/stlock/dualAGNs/halomap_files/HaloBH-TangosPynbodyMap-R25-snap{}.hdf5"
+    output_path = "/scratch/stlock/tripleAGNs/datasets/catalogue/TripleAGN-Catalog-R50-z{:.2f}.pkl"
     sim_path = "/home/stlock/projects/rrg-babul-ad/SHARED/Romulus/cosmo25/"
 
     print('loading snapshots')
@@ -342,31 +391,23 @@ def main(snapshot_index):
     print('calculating bh properties')
     matched_bh_df = match_bh_properties(s, tangos_df)
     print('find triple agn systems')
-    agn_triples_df = find_triple_agn_systems(matched_bh_df, s, t_now, t_prev)
+    triple_agn_df = find_triple_agn_systems(matched_bh_df, s, t_now, t_prev)
 
-    # Check if any triple systems were found
-    if len(agn_triples_df) == 0:
-        print(f'No triple AGN systems found for snapshot {snap} at z={z:.2f}')
-        print('Skipping this snapshot.')
+    if len(triple_agn_df) == 0:
+        print(f"No triple AGN systems found at z={z:.2f}")
+        # Still save an empty catalog
+        save_triple_agn_catalog(triple_agn_df, output_path, z)
         return
 
-    # Get all unique halo IDs from the triple AGN systems
-    all_halo_ids = pd.unique(agn_triples_df[['pynbody_haloid', 'Neighbour1BH_pynbody_haloid', 'Neighbour2BH_pynbody_haloid']].values.ravel())
+    # Get all unique halo IDs from the triple systems
+    all_halo_ids = pd.unique(triple_agn_df[['pynbody_haloid', 
+                                            'Neighbour1BH_pynbody_haloid', 
+                                            'Neighbour2BH_pynbody_haloid']].values.ravel())
     
-    # Compute halo properties
     halo_df = compute_halo_environment_properties(s, all_halo_ids, t_now, t_prev)
 
-    # Check if halo processing succeeded
-    if len(halo_df) == 0:
-        print(f'WARNING: No halo properties could be computed for snapshot {snap} at z={z:.2f}')
-        print('Saving AGN catalog without halo information.')
-        final_df = agn_triples_df
-    else:
-        print(f'Successfully computed properties for {len(halo_df)} halos')
-        final_df = merge_agn_with_halos(agn_triples_df, halo_df)
-    
+    final_df = merge_agn_with_halos(triple_agn_df, halo_df)
     save_triple_agn_catalog(final_df, output_path, z)
-    print(f'Successfully saved catalog with {len(final_df)} triple AGN systems')
 
 if __name__ == "__main__":
     print('start running the main')

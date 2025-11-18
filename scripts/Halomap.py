@@ -60,7 +60,8 @@ for j in range(len(allBHs)):
         pass
 
 ####################################################################################################
-hf = h5py.File('/scratch/stlock/tripleAGNs/halomap_files/HaloBH-TangosPynbodyMap-R25-snap{0}.hdf5'.format(snap), 'w')
+hf = h5py.File('/scratch/stlock/dualAGNs/halomap_files/HaloBH-TangosPynbodyMap-R25-snap{0}.hdf5'.format(snap), 'w')
+
 
 hf.create_dataset('pynbody_haloid', data=bh_pnb_haloid)
 hf.create_dataset('tangos_haloid', data=bh_tng_haloid)

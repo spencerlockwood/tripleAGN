@@ -1,0 +1,51 @@
+TRIPLE AGN HALO CONFIGURATION ANALYSIS
+======================================================================
+
+Total systems: 77
+
+Configuration breakdown:
+  All in same halo: 70 (90.9%)
+  Two halos: 7 (9.1%)
+
+======================================================================
+SYSTEMS WITH ALL BHs IN SAME HALO
+======================================================================
+
+Count: 70
+
+Possible physical interpretations:
+  1. Post-merger systems: Multiple galaxies merged, BHs still separating
+  2. Late-stage mergers: Halo finder sees single halo, BHs not yet merged
+  3. Satellite galaxies: Small galaxies within larger host halo
+
+Separation statistics:
+  Mean: 4.73 ± 4.11 kpc
+  Median: 3.20 kpc
+  Range: 0.48 - 20.82 kpc
+
+Example systems:
+
+  System 1 (z=0.21):
+    Halo ID: 55611
+    BH IDs: 1981809013, 1981809455, 1982123566
+    Separations: 4.96, 2.39, 7.16 kpc
+
+  System 2 (z=0.25):
+    Halo ID: 46466
+    BH IDs: 1981809606, 1982495406, 1983048877
+    Separations: 2.37, 6.18, 3.94 kpc
+
+  System 3 (z=0.29):
+    Halo ID: 68672
+    BH IDs: 1981809936, 1981810795, 1981827033
+    Separations: 2.21, 1.51, 2.37 kpc
+
+  System 4 (z=0.31):
+    Halo ID: 93972
+    BH IDs: 1982209764, 1981808887, 1982310818
+    Separations: 2.72, 3.06, 1.86 kpc
+
+  System 5 (z=0.50):
+    Halo ID: 70163
+    BH IDs: 1981808650, 1981811794, 1982319035
+    Separations: 20.49, 21.73, 3.31 kpc

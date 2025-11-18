@@ -1,0 +1,98 @@
+TRIPLE AGN SYSTEM OVERLAP ANALYSIS
+======================================================================
+
+Separation threshold used: 50.0 kpc
+Total snapshots analyzed: 59
+Total triple systems: 567
+
+OVERLAPS DETECTED:
+  Total overlapping BH pairs: 45
+  Snapshots with overlaps: 8
+  Systems involved: 16
+
+Detailed breakdown:
+
+  z=1.40:
+    Triple systems: 10.0
+    Overlapping pairs: 3.0
+    Systems affected: 2.0
+      System 8 (BH3, ID=1982129912) <-> System 9 (BH1, ID=1983445284): 13.38 kpc
+      System 8 (BH3, ID=1982129912) <-> System 9 (BH2, ID=1981809936): 17.42 kpc
+      System 8 (BH3, ID=1982129912) <-> System 9 (BH3, ID=1981823046): 20.52 kpc
+
+  z=1.90:
+    Triple systems: 14.0
+    Overlapping pairs: 7.0
+    Systems affected: 2.0
+      System 1 (BH1, ID=1981808707) <-> System 11 (BH1, ID=1982037509): 40.81 kpc
+      System 1 (BH2, ID=1981808889) <-> System 11 (BH1, ID=1982037509): 8.51 kpc
+      System 1 (BH2, ID=1981808889) <-> System 11 (BH2, ID=1981838042): 35.58 kpc
+      System 1 (BH2, ID=1981808889) <-> System 11 (BH3, ID=1982646574): 37.57 kpc
+      System 1 (BH3, ID=1981808959) <-> System 11 (BH1, ID=1982037509): 8.46 kpc
+      System 1 (BH3, ID=1981808959) <-> System 11 (BH2, ID=1981838042): 35.76 kpc
+      System 1 (BH3, ID=1981808959) <-> System 11 (BH3, ID=1982646574): 37.76 kpc
+
+  z=2.01:
+    Triple systems: 20.0
+    Overlapping pairs: 7.0
+    Systems affected: 2.0
+      System 14 (BH1, ID=1982892248) <-> System 16 (BH1, ID=1983372274): 48.91 kpc
+      System 14 (BH2, ID=1982238544) <-> System 16 (BH1, ID=1983372274): 3.72 kpc
+      System 14 (BH2, ID=1982238544) <-> System 16 (BH2, ID=1981814060): 12.40 kpc
+      System 14 (BH2, ID=1982238544) <-> System 16 (BH3, ID=1981871678): 6.87 kpc
+      System 14 (BH3, ID=1985401342) <-> System 16 (BH1, ID=1983372274): 4.04 kpc
+      System 14 (BH3, ID=1985401342) <-> System 16 (BH2, ID=1981814060): 12.80 kpc
+      System 14 (BH3, ID=1985401342) <-> System 16 (BH3, ID=1981871678): 7.97 kpc
+
+  z=2.52:
+    Triple systems: 20.0
+    Overlapping pairs: 4.0
+    Systems affected: 2.0
+      System 3 (BH2, ID=1981828493) <-> System 6 (BH1, ID=1981814563): 28.91 kpc
+      System 3 (BH2, ID=1981828493) <-> System 6 (BH2, ID=1981809775): 47.37 kpc
+      System 3 (BH2, ID=1981828493) <-> System 6 (BH3, ID=1981814060): 46.71 kpc
+      System 3 (BH3, ID=1982238544) <-> System 6 (BH1, ID=1981814563): 40.59 kpc
+
+  z=2.65:
+    Triple systems: 18.0
+    Overlapping pairs: 6.0
+    Systems affected: 2.0
+      System 11 (BH2, ID=1981854923) <-> System 13 (BH1, ID=1982494268): 43.78 kpc
+      System 11 (BH2, ID=1981854923) <-> System 13 (BH2, ID=1981817427): 43.20 kpc
+      System 11 (BH2, ID=1981854923) <-> System 13 (BH3, ID=1982259168): 44.65 kpc
+      System 11 (BH3, ID=1982245919) <-> System 13 (BH1, ID=1982494268): 48.10 kpc
+      System 11 (BH3, ID=1982245919) <-> System 13 (BH2, ID=1981817427): 47.86 kpc
+      System 11 (BH3, ID=1982245919) <-> System 13 (BH3, ID=1982259168): 48.48 kpc
+
+  z=2.79:
+    Triple systems: 27.0
+    Overlapping pairs: 5.0
+    Systems affected: 2.0
+      System 14 (BH1, ID=1981871678) <-> System 22 (BH1, ID=1982189920): 48.36 kpc
+      System 14 (BH2, ID=1981814844) <-> System 22 (BH1, ID=1982189920): 5.56 kpc
+      System 14 (BH2, ID=1981814844) <-> System 22 (BH2, ID=1981816385): 27.97 kpc
+      System 14 (BH2, ID=1981814844) <-> System 22 (BH3, ID=1981944092): 42.71 kpc
+      System 14 (BH3, ID=1981828493) <-> System 22 (BH1, ID=1982189920): 49.66 kpc
+
+  z=2.98:
+    Triple systems: 26.0
+    Overlapping pairs: 6.0
+    Systems affected: 2.0
+      System 18 (BH2, ID=1981809775) <-> System 22 (BH1, ID=1982410738): 28.45 kpc
+      System 18 (BH2, ID=1981809775) <-> System 22 (BH2, ID=1981816385): 36.33 kpc
+      System 18 (BH2, ID=1981809775) <-> System 22 (BH3, ID=1982956101): 27.05 kpc
+      System 18 (BH3, ID=1981814844) <-> System 22 (BH1, ID=1982410738): 31.97 kpc
+      System 18 (BH3, ID=1981814844) <-> System 22 (BH2, ID=1981816385): 28.63 kpc
+      System 18 (BH3, ID=1981814844) <-> System 22 (BH3, ID=1982956101): 30.68 kpc
+
+  z=3.00:
+    Triple systems: 31.0
+    Overlapping pairs: 7.0
+    Systems affected: 2.0
+      System 8 (BH1, ID=1981816385) <-> System 12 (BH1, ID=1981840600): 34.03 kpc
+      System 8 (BH2, ID=1981814844) <-> System 12 (BH1, ID=1981840600): 12.16 kpc
+      System 8 (BH2, ID=1981814844) <-> System 12 (BH2, ID=1982182574): 40.99 kpc
+      System 8 (BH2, ID=1981814844) <-> System 12 (BH3, ID=1982956101): 37.54 kpc
+      System 8 (BH3, ID=1982860481) <-> System 12 (BH1, ID=1981840600): 8.99 kpc
+      System 8 (BH3, ID=1982860481) <-> System 12 (BH2, ID=1982182574): 36.66 kpc
+      System 8 (BH3, ID=1982860481) <-> System 12 (BH3, ID=1982956101): 39.16 kpc
