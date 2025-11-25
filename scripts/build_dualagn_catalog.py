@@ -99,7 +99,7 @@ def compute_bh_local_env(sim, pos, t_now, t_prev):
 ##############################################
 #print('STEP 5: Identify dual AGNs')
 ##############################################
-def find_dual_agn_pairs(df, sim, t_now, t_prev, separation_threshold=50, mdot_threshold=1.89e-3):
+def find_dual_agn_pairs(df, sim, t_now, t_prev, separation_threshold=30, mdot_threshold=1.89e-3):
     print('step 5')
 
     # --- Compute Lbol and Ledd for ALL BHs upfront ---
@@ -302,8 +302,8 @@ def main(snapshot_index):
             '005376','005529','005632','005795','005888','006069','006144','006350','006390','006400','006640','006656',\
             '006912','006937','007168','007212','007241','007394','007424','007552','007680','007779','007869','007936',\
             '008192']  
-    hdf5_path = "/scratch/stlock/dualAGNs/halomap_files/HaloBH-TangosPynbodyMap-R25-snap{}.hdf5"
-    output_path = "/scratch/stlock/dualAGNs/datasets/catalogue/DualAGN-Catalog-R25-z{:.2f}.pkl"
+    hdf5_path = "/scratch/stlock/halomap_files/HaloBH-TangosPynbodyMap-R25-snap{}.hdf5"
+    output_path = "/scratch/stlock/dualAGNs/datasets/catalogue_30kpc/DualAGN-Catalog-R25-z{:.2f}.pkl"
     sim_path = "/home/stlock/projects/rrg-babul-ad/SHARED/Romulus/cosmo25/"
 
     print('loading snapshots')

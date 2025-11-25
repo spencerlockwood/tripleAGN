@@ -108,10 +108,12 @@ def compute_bh_local_env(sim, pos_comoving, t_now, t_prev, z):
 ##############################################
 #print('STEP 5: Identify triple AGNs')
 ##############################################
-def find_triple_agn_systems(df, sim, t_now, t_prev, separation_threshold=30, mdot_threshold=1.89e-3, z=None):
+def find_triple_agn_systems(df, sim, t_now, t_prev, separation_threshold=50, mdot_threshold=1.89e-3, z=None):
     print('step 5: Finding triple AGN systems')
 
-    df = df.copy()  # safe copy
+    # --- Compute Lbol and Ledd for ALL BHs upfront ---
+    df = df.copy()  # to safely add new columns
+
     msun_to_g = 1.989e33
     yr_to_s = 3.154e7
     c_cgs = 3e10
@@ -120,91 +122,120 @@ def find_triple_agn_systems(df, sim, t_now, t_prev, separation_threshold=30, mdo
     df['BH_Lbol'] = 0.1 * df['BH_mdot'] * msun_to_g / yr_to_s * c_cgs**2
     df['BH_Ledd'] = 1.26e38 * df['BH_mass']
 
-    Lbol_threshold = 1e43
-
-    print(f"Total BHs in catalog: {len(df)}")
-
+    # --- Select only BHs that meet the AGN threshold ---
+    agn_bhs = df[df['BH_Lbol'] > 1e43].copy()
+    
+    print(f"Total AGNs found: {len(agn_bhs)}")
+    
+    # Track which BHs have been assigned to a system
     assigned_bhs = set()
     triple_systems = []
 
-    # Iterate over all BHs (allow seed to be non-luminous); require at least two of the three to be above Lbol threshold
-    for idx, bh in df.iterrows():
+    # Iterate through all AGN BHs to find triple systems
+    for idx, bh in agn_bhs.iterrows():
+        # Skip if this BH is already in a system
         if bh['BH_id'] in assigned_bhs:
             continue
-
+            
+        # BH positions in the dataframe are now in comoving kpc
         bh_pos_com = np.array([bh['BH_x'], bh['BH_y'], bh['BH_z']])
+        
+        # Calculate distances to all other BHs in comoving kpc
         deltas = df[['BH_x', 'BH_y', 'BH_z']].values - bh_pos_com
         distances = np.linalg.norm(deltas, axis=1)
 
-        # neighbor candidates: within separation, not the same BH, not already assigned, and satisfy mdot threshold
-        neighbor_mask = (distances < separation_threshold) & \
-                        (df['BH_id'] != bh['BH_id']) & \
-                        (~df['BH_id'].isin(assigned_bhs)) & \
-                        (df['BH_mdot'] > mdot_threshold)
-        neighbors = df[neighbor_mask]
+        # Select neighbor BHs that are also AGN, not assigned, and not the current BH
+        neighbors = df[(distances < separation_threshold) & 
+                       (df['BH_Lbol'] > 1e43) &
+                       (df['BH_mdot'] > mdot_threshold) & 
+                       (df['BH_id'] != bh['BH_id']) &
+                       (~df['BH_id'].isin(assigned_bhs))]
 
-        # need exactly 2 neighbors to form a triple
+        # Check if we have exactly 2 neighbors (triple system)
         if len(neighbors) == 2:
+            print(f'Triple AGN system detected around BH {bh["BH_id"]}')
+            
             neighbor1 = neighbors.iloc[0]
             neighbor2 = neighbors.iloc[1]
-
-            # Count how many of the three exceed the luminosity threshold
-            luminous_count = int(bh['BH_Lbol'] > Lbol_threshold) + \
-                              int(neighbor1['BH_Lbol'] > Lbol_threshold) + \
-                              int(neighbor2['BH_Lbol'] > Lbol_threshold)
-
-            # require at least two luminous members
-            if luminous_count >= 2:
-                print(f'Triple AGN system detected around BH {bh["BH_id"]} (luminous_count={luminous_count})')
-
-                # mark as assigned
-                assigned_bhs.update([bh['BH_id'], neighbor1['BH_id'], neighbor2['BH_id']])
-
-                # separations in comoving kpc
-                dx1 = bh['BH_x'] - neighbor1['BH_x']; dy1 = bh['BH_y'] - neighbor1['BH_y']; dz1 = bh['BH_z'] - neighbor1['BH_z']
-                separation_3d_1 = np.sqrt(dx1**2 + dy1**2 + dz1**2); separation_2d_1 = np.sqrt(dx1**2 + dy1**2)
-
-                dx2 = bh['BH_x'] - neighbor2['BH_x']; dy2 = bh['BH_y'] - neighbor2['BH_y']; dz2 = bh['BH_z'] - neighbor2['BH_z']
-                separation_3d_2 = np.sqrt(dx2**2 + dy2**2 + dz2**2); separation_2d_2 = np.sqrt(dx2**2 + dy2**2)
-
-                dx12 = neighbor1['BH_x'] - neighbor2['BH_x']; dy12 = neighbor1['BH_y'] - neighbor2['BH_y']; dz12 = neighbor1['BH_z'] - neighbor2['BH_z']
-                separation_3d_12 = np.sqrt(dx12**2 + dy12**2 + dz12**2); separation_2d_12 = np.sqrt(dx12**2 + dy12**2)
-
-                # local environments (pos_comoving passed)
-                bh_env = compute_bh_local_env(sim, bh_pos_com, t_now, t_prev, z)
-                neighbor1_env = compute_bh_local_env(sim, np.array([neighbor1['BH_x'], neighbor1['BH_y'], neighbor1['BH_z']]), t_now, t_prev, z)
-                neighbor1_env = {f'Neighbour1{key}': val for key, val in neighbor1_env.items()}
-                neighbor2_env = compute_bh_local_env(sim, np.array([neighbor2['BH_x'], neighbor2['BH_y'], neighbor2['BH_z']]), t_now, t_prev, z)
-                neighbor2_env = {f'Neighbour2{key}': val for key, val in neighbor2_env.items()}
-
-                neighbor1_dict = {f'Neighbour1{col}': neighbor1[col] for col in df.columns if col.startswith('BH_') or col == 'BH_id'}
-                neighbor1_dict.update({
-                    'Separation_3D_1_kpc_com': separation_3d_1,
-                    'Separation_2D_1_kpc_com': separation_2d_1,
-                    'Neighbour1BH_pynbody_haloid': neighbor1.get('pynbody_haloid', np.nan)
-                })
-
-                neighbor2_dict = {f'Neighbour2{col}': neighbor2[col] for col in df.columns if col.startswith('BH_') or col == 'BH_id'}
-                neighbor2_dict.update({
-                    'Separation_3D_2_kpc_com': separation_3d_2,
-                    'Separation_2D_2_kpc_com': separation_2d_2,
-                    'Neighbour2BH_pynbody_haloid': neighbor2.get('pynbody_haloid', np.nan)
-                })
-
-                cross_separation_dict = {
-                    'Separation_3D_12_kpc_com': separation_3d_12,
-                    'Separation_2D_12_kpc_com': separation_2d_12
-                }
-
-                triple_system = {**bh.to_dict(), **bh_env,
-                                 **neighbor1_dict, **neighbor1_env,
-                                 **neighbor2_dict, **neighbor2_env,
-                                 **cross_separation_dict}
-                triple_systems.append(triple_system)
-
+            
+            # Mark all three BHs as assigned
+            assigned_bhs.add(bh['BH_id'])
+            assigned_bhs.add(neighbor1['BH_id'])
+            assigned_bhs.add(neighbor2['BH_id'])
+            
+            # Compute separations in comoving kpc
+            dx1 = bh['BH_x'] - neighbor1['BH_x']
+            dy1 = bh['BH_y'] - neighbor1['BH_y']
+            dz1 = bh['BH_z'] - neighbor1['BH_z']
+            separation_3d_1 = np.sqrt(dx1**2 + dy1**2 + dz1**2)
+            separation_2d_1 = np.sqrt(dx1**2 + dy1**2)
+            
+            dx2 = bh['BH_x'] - neighbor2['BH_x']
+            dy2 = bh['BH_y'] - neighbor2['BH_y']
+            dz2 = bh['BH_z'] - neighbor2['BH_z']
+            separation_3d_2 = np.sqrt(dx2**2 + dy2**2 + dz2**2)
+            separation_2d_2 = np.sqrt(dx2**2 + dy2**2)
+            
+            # Separation between the two neighbors
+            dx12 = neighbor1['BH_x'] - neighbor2['BH_x']
+            dy12 = neighbor1['BH_y'] - neighbor2['BH_y']
+            dz12 = neighbor1['BH_z'] - neighbor2['BH_z']
+            separation_3d_12 = np.sqrt(dx12**2 + dy12**2 + dz12**2)
+            separation_2d_12 = np.sqrt(dx12**2 + dy12**2)
+            
+            # Compute local environments: pass comoving BH positions and redshift
+            bh_env = compute_bh_local_env(sim, bh_pos_com, t_now, t_prev, z)
+            
+            neighbor1_env = compute_bh_local_env(
+                sim,
+                np.array([neighbor1['BH_x'], neighbor1['BH_y'], neighbor1['BH_z']]),
+                t_now,
+                t_prev,
+                z
+            )
+            neighbor1_env = {f'Neighbour1{key}': val for key, val in neighbor1_env.items()}
+            
+            neighbor2_env = compute_bh_local_env(
+                sim,
+                np.array([neighbor2['BH_x'], neighbor2['BH_y'], neighbor2['BH_z']]),
+                t_now,
+                t_prev,
+                z
+            )
+            neighbor2_env = {f'Neighbour2{key}': val for key, val in neighbor2_env.items()}
+            
+            # Create dictionaries for neighbors
+            neighbor1_dict = {f'Neighbour1{col}': neighbor1[col] for col in df.columns 
+                            if col.startswith('BH_') or col == 'BH_id'}
+            neighbor1_dict.update({
+                'Separation_3D_1_kpc_com': separation_3d_1,
+                'Separation_2D_1_kpc_com': separation_2d_1,
+                'Neighbour1BH_pynbody_haloid': neighbor1['pynbody_haloid']
+            })
+            
+            neighbor2_dict = {f'Neighbour2{col}': neighbor2[col] for col in df.columns 
+                            if col.startswith('BH_') or col == 'BH_id'}
+            neighbor2_dict.update({
+                'Separation_3D_2_kpc_com': separation_3d_2,
+                'Separation_2D_2_kpc_com': separation_2d_2,
+                'Neighbour2BH_pynbody_haloid': neighbor2['pynbody_haloid']
+            })
+            
+            # Add separation between neighbors
+            cross_separation_dict = {
+                'Separation_3D_12_kpc_com': separation_3d_12,
+                'Separation_2D_12_kpc_com': separation_2d_12
+            }
+            
+            # Combine all data
+            triple_system = {**bh.to_dict(), **bh_env, 
+                           **neighbor1_dict, **neighbor1_env,
+                           **neighbor2_dict, **neighbor2_env,
+                           **cross_separation_dict}
+            triple_systems.append(triple_system)
+            
         elif len(neighbors) > 2:
-            # optionally skip crowded regions
-            print(f'More than 2 neighbors ({len(neighbors)}) near BH {bh["BH_id"]} - skipping')
+            print(f'More than 2 AGN neighbors ({len(neighbors)}) detected near BH {bh["BH_id"]} - skipping')
 
     print(f"Total triple AGN systems found: {len(triple_systems)}")
     return pd.DataFrame(triple_systems)
@@ -369,8 +400,8 @@ def main(snapshot_index):
             '005376','005529','005632','005795','005888','006069','006144','006350','006390','006400','006640','006656',\
             '006912','006937','007168','007212','007241','007394','007424','007552','007680','007779','007869','007936',\
             '008192']  
-    hdf5_path = "/scratch/stlock/dualAGNs/halomap_files/HaloBH-TangosPynbodyMap-R25-snap{}.hdf5"
-    output_path = "/scratch/stlock/tripleAGNs/datasets/catalogue/TripleAGN-Catalog-R50-z{:.2f}.pkl"
+    hdf5_path = "/scratch/stlock/halomap_files/HaloBH-TangosPynbodyMap-R25-snap{}.hdf5"
+    output_path = "/scratch/stlock/tripleAGNs/catalogs/1e43lum/catalogue_50kpc_1e43lum/TripleAGN-Catalog-R50-z{:.2f}.pkl"
     sim_path = "/home/stlock/projects/rrg-babul-ad/SHARED/Romulus/cosmo25/"
 
     print('loading snapshots')
@@ -397,7 +428,6 @@ def main(snapshot_index):
     halo_df = compute_halo_environment_properties(s, all_halo_ids, t_now, t_prev, z)
     final_df = merge_agn_with_halos(triple_agn_df, halo_df)
     save_triple_agn_catalog(final_df, output_path, z)
-
 
 if __name__ == "__main__":
     print('start running the main')

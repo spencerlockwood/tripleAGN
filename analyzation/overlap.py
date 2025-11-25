@@ -5,12 +5,12 @@ import os
 from itertools import combinations
 
 # Define paths
-catalog_path = "/scratch/stlock/tripleAGNs/catalogs/1e40lum/catalogue_50kpc_1e40lum/"
-output_dir = "/home/stlock/tripleAGN/analysis/"
+catalog_path = "/scratch/stlock/tripleAGNs/catalogs/1e40lum/catalogue_100kpc_1e40lum/"
+output_dir = "/home/stlock/tripleAGN/plots_and_data/"
 os.makedirs(output_dir, exist_ok=True)
 
 # Separation threshold used in detection (adjust to match your run)
-SEPARATION_THRESHOLD = 50.0  # kpc
+SEPARATION_THRESHOLD = 100.0  # kpc
 
 print("="*70)
 print("SEARCHING FOR OVERLAPPING TRIPLE AGN SYSTEMS")

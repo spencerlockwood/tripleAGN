@@ -369,8 +369,8 @@ def main(snapshot_index):
             '005376','005529','005632','005795','005888','006069','006144','006350','006390','006400','006640','006656',\
             '006912','006937','007168','007212','007241','007394','007424','007552','007680','007779','007869','007936',\
             '008192']  
-    hdf5_path = "/scratch/stlock/dualAGNs/halomap_files/HaloBH-TangosPynbodyMap-R25-snap{}.hdf5"
-    output_path = "/scratch/stlock/tripleAGNs/datasets/catalogue/TripleAGN-Catalog-R50-z{:.2f}.pkl"
+    hdf5_path = "/scratch/stlock/halomap_files/HaloBH-TangosPynbodyMap-R25-snap{}.hdf5"
+    output_path = "/scratch/stlock/tripleAGNs/catalogs/1e43lum/catalogue_2lum_1not_30kpc_1e43lum/TripleAGN-Catalog-R50-z{:.2f}.pkl"
     sim_path = "/home/stlock/projects/rrg-babul-ad/SHARED/Romulus/cosmo25/"
 
     print('loading snapshots')
@@ -397,8 +397,6 @@ def main(snapshot_index):
     halo_df = compute_halo_environment_properties(s, all_halo_ids, t_now, t_prev, z)
     final_df = merge_agn_with_halos(triple_agn_df, halo_df)
     save_triple_agn_catalog(final_df, output_path, z)
-
-
 if __name__ == "__main__":
     print('start running the main')
     parser = argparse.ArgumentParser()

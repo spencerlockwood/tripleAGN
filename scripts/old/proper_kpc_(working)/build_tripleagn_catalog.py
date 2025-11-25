@@ -38,7 +38,7 @@ def load_tangos_bh_data(snap, hdf5_path):
 ##############################################
 #print('STEP 3: Match BHs between Tangos and Pynbody')
 ##############################################
-def match_bh_properties(sim, tangos_df, z):
+def match_bh_properties(sim, tangos_df):
     print('step 3')
     BH_idx = np.where(sim.s['tform'] < 0)
     all_bh_ids = sim.s['iord'][BH_idx]
@@ -46,72 +46,65 @@ def match_bh_properties(sim, tangos_df, z):
 
     matched_ids = sim.s['iord'][BH_idx][match_mask]
     matched_vel = sim.s['vel'][BH_idx][match_mask]
-    # positions in physical kpc from snapshot, convert to comoving kpc
-    matched_pos_phys = sim.s['pos'][BH_idx][match_mask].in_units('kpc')
-    matched_pos_com = matched_pos_phys * (1.0 + z)
+    matched_pos = sim.s['pos'][BH_idx][match_mask].in_units('kpc')
 
     matched_df = pd.DataFrame({
         'BH_id': matched_ids,
         'BH_vx': matched_vel[:, 0],
         'BH_vy': matched_vel[:, 1],
         'BH_vz': matched_vel[:, 2],
-        'BH_x': matched_pos_com[:, 0],
-        'BH_y': matched_pos_com[:, 1],
-        'BH_z': matched_pos_com[:, 2],
+        'BH_x': matched_pos[:, 0],
+        'BH_y': matched_pos[:, 1],
+        'BH_z': matched_pos[:, 2],
     })
     
+
     merged = pd.merge(tangos_df, matched_df, on='BH_id', how='inner')
     return merged
 
 ##############################################
 #print('STEP 4: Compute BH local environment properties')
 ##############################################
-def compute_bh_local_env(sim, pos_comoving, t_now, t_prev, z):
+def compute_bh_local_env(sim, pos, t_now, t_prev):
     print('step 4')
     result = {}
-    a = 1.0 / (1.0 + z)  # scale factor
-    # convert comoving center -> physical for selection with snapshot (snapshot is in physical units)
-    center_phys = np.array(pos_comoving) * a
-
-    for r_com in [1, 5]:  # radii now interpreted as comoving kpc
-        # convert to physical radius for selection
-        r_phys = r_com * a
-        region = sim[pnb.filt.Sphere(r_phys, center_phys)]
+    for r in [1, 5]:
+        region = sim[pnb.filt.Sphere(r, pos)]
         mstar = region.s['mass'].sum()
         mgas = region.gas['mass'].sum()
-        # compute volume in comoving kpc^3 (use comoving r for density)
-        volume_com = (4/3) * np.pi * (r_com**3)
+        volume = (4/3) * np.pi * (r**3)
 
-        result[f'BH_Mstar_{r_com}'] = mstar
-        result[f'BH_GasDensity_{r_com}'] = mgas / volume_com if volume_com > 0 else np.nan
+        result[f'BH_Mstar_{r}'] = mstar
+        result[f'BH_GasDensity_{r}'] = mgas / volume if volume > 0 else np.nan
 
         if len(region.gas) > 0:
             gas_mass = region.gas['mass']
             gas_metal = region.gas['metals'] * gas_mass
-            result[f'BH_GasMetallicity_{r_com}'] = gas_metal.sum() / gas_mass.sum() if gas_mass.sum() > 0 else np.nan
+            result[f'BH_GasMetallicity_{r}'] = gas_metal.sum() / gas_mass.sum() if gas_mass.sum() > 0 else np.nan
         else:
-            result[f'BH_GasMetallicity_{r_com}'] = np.nan
+            result[f'BH_GasMetallicity_{r}'] = np.nan
 
         if len(region.s) > 0:
             star_mass = region.s['mass']
             star_metal = region.s['metals'] * star_mass
-            result[f'BH_StellarMetallicity_{r_com}'] = star_metal.sum() / star_mass.sum() if star_mass.sum() > 0 else np.nan
+            result[f'BH_StellarMetallicity_{r}'] = star_metal.sum() / star_mass.sum() if star_mass.sum() > 0 else np.nan
         else:
-            result[f'BH_StellarMetallicity_{r_com}'] = np.nan
+            result[f'BH_StellarMetallicity_{r}'] = np.nan
 
         newstars = region.s['tform'] > t_prev
-        # SFR reported in Msun/yr using comoving volume/time window
-        result[f'BH_SFR_{r_com}'] = region.s['mass'][newstars].sum() / ((t_now - t_prev) * 1e9) if len(region.s['mass'][newstars]) > 0 else 0
+        result[f'BH_SFR_{r}'] = region.s['mass'][newstars].sum() / ((t_now - t_prev) * 1e9) if len(region.s['mass'][newstars]) > 0 else 0
 
     return result
 
 ##############################################
 #print('STEP 5: Identify triple AGNs')
 ##############################################
-def find_triple_agn_systems(df, sim, t_now, t_prev, separation_threshold=30, mdot_threshold=1.89e-3, z=None):
+def find_triple_agn_systems(df, sim, t_now, t_prev, separation_threshold=30, mdot_threshold=1.89e-3):
     print('step 5: Finding triple AGN systems')
 
-    df = df.copy()  # safe copy
+    # --- Compute Lbol and Ledd for ALL BHs upfront ---
+    df = df.copy()  # to safely add new columns
+
     msun_to_g = 1.989e33
     yr_to_s = 3.154e7
     c_cgs = 3e10
@@ -120,91 +113,117 @@ def find_triple_agn_systems(df, sim, t_now, t_prev, separation_threshold=30, mdo
     df['BH_Lbol'] = 0.1 * df['BH_mdot'] * msun_to_g / yr_to_s * c_cgs**2
     df['BH_Ledd'] = 1.26e38 * df['BH_mass']
 
-    Lbol_threshold = 1e43
-
-    print(f"Total BHs in catalog: {len(df)}")
-
+    # --- Select only BHs that meet the AGN threshold ---
+    agn_bhs = df[df['BH_Lbol'] > 1e43].copy()
+    
+    print(f"Total AGNs found: {len(agn_bhs)}")
+    
+    # Track which BHs have been assigned to a system
     assigned_bhs = set()
     triple_systems = []
 
-    # Iterate over all BHs (allow seed to be non-luminous); require at least two of the three to be above Lbol threshold
-    for idx, bh in df.iterrows():
+    # Iterate through all AGN BHs to find triple systems
+    for idx, bh in agn_bhs.iterrows():
+        # Skip if this BH is already in a system
         if bh['BH_id'] in assigned_bhs:
             continue
-
-        bh_pos_com = np.array([bh['BH_x'], bh['BH_y'], bh['BH_z']])
-        deltas = df[['BH_x', 'BH_y', 'BH_z']].values - bh_pos_com
+            
+        bh_pos = np.array([bh['BH_x'], bh['BH_y'], bh['BH_z']])
+        
+        # Calculate distances to all other BHs
+        deltas = df[['BH_x', 'BH_y', 'BH_z']].values - bh_pos
         distances = np.linalg.norm(deltas, axis=1)
 
-        # neighbor candidates: within separation, not the same BH, not already assigned, and satisfy mdot threshold
-        neighbor_mask = (distances < separation_threshold) & \
-                        (df['BH_id'] != bh['BH_id']) & \
-                        (~df['BH_id'].isin(assigned_bhs)) & \
-                        (df['BH_mdot'] > mdot_threshold)
-        neighbors = df[neighbor_mask]
+        # Select neighbor BHs that are also AGN, not assigned, and not the current BH
+        neighbors = df[(distances < separation_threshold) & 
+                       (df['BH_Lbol'] > 1e43) &
+                       (df['BH_mdot'] > mdot_threshold) & 
+                       (df['BH_id'] != bh['BH_id']) &
+                       (~df['BH_id'].isin(assigned_bhs))]
 
-        # need exactly 2 neighbors to form a triple
+        # Check if we have exactly 2 neighbors (triple system)
         if len(neighbors) == 2:
+            print(f'Triple AGN system detected around BH {bh["BH_id"]}')
+            
             neighbor1 = neighbors.iloc[0]
             neighbor2 = neighbors.iloc[1]
-
-            # Count how many of the three exceed the luminosity threshold
-            luminous_count = int(bh['BH_Lbol'] > Lbol_threshold) + \
-                              int(neighbor1['BH_Lbol'] > Lbol_threshold) + \
-                              int(neighbor2['BH_Lbol'] > Lbol_threshold)
-
-            # require at least two luminous members
-            if luminous_count >= 2:
-                print(f'Triple AGN system detected around BH {bh["BH_id"]} (luminous_count={luminous_count})')
-
-                # mark as assigned
-                assigned_bhs.update([bh['BH_id'], neighbor1['BH_id'], neighbor2['BH_id']])
-
-                # separations in comoving kpc
-                dx1 = bh['BH_x'] - neighbor1['BH_x']; dy1 = bh['BH_y'] - neighbor1['BH_y']; dz1 = bh['BH_z'] - neighbor1['BH_z']
-                separation_3d_1 = np.sqrt(dx1**2 + dy1**2 + dz1**2); separation_2d_1 = np.sqrt(dx1**2 + dy1**2)
-
-                dx2 = bh['BH_x'] - neighbor2['BH_x']; dy2 = bh['BH_y'] - neighbor2['BH_y']; dz2 = bh['BH_z'] - neighbor2['BH_z']
-                separation_3d_2 = np.sqrt(dx2**2 + dy2**2 + dz2**2); separation_2d_2 = np.sqrt(dx2**2 + dy2**2)
-
-                dx12 = neighbor1['BH_x'] - neighbor2['BH_x']; dy12 = neighbor1['BH_y'] - neighbor2['BH_y']; dz12 = neighbor1['BH_z'] - neighbor2['BH_z']
-                separation_3d_12 = np.sqrt(dx12**2 + dy12**2 + dz12**2); separation_2d_12 = np.sqrt(dx12**2 + dy12**2)
-
-                # local environments (pos_comoving passed)
-                bh_env = compute_bh_local_env(sim, bh_pos_com, t_now, t_prev, z)
-                neighbor1_env = compute_bh_local_env(sim, np.array([neighbor1['BH_x'], neighbor1['BH_y'], neighbor1['BH_z']]), t_now, t_prev, z)
-                neighbor1_env = {f'Neighbour1{key}': val for key, val in neighbor1_env.items()}
-                neighbor2_env = compute_bh_local_env(sim, np.array([neighbor2['BH_x'], neighbor2['BH_y'], neighbor2['BH_z']]), t_now, t_prev, z)
-                neighbor2_env = {f'Neighbour2{key}': val for key, val in neighbor2_env.items()}
-
-                neighbor1_dict = {f'Neighbour1{col}': neighbor1[col] for col in df.columns if col.startswith('BH_') or col == 'BH_id'}
-                neighbor1_dict.update({
-                    'Separation_3D_1_kpc_com': separation_3d_1,
-                    'Separation_2D_1_kpc_com': separation_2d_1,
-                    'Neighbour1BH_pynbody_haloid': neighbor1.get('pynbody_haloid', np.nan)
-                })
-
-                neighbor2_dict = {f'Neighbour2{col}': neighbor2[col] for col in df.columns if col.startswith('BH_') or col == 'BH_id'}
-                neighbor2_dict.update({
-                    'Separation_3D_2_kpc_com': separation_3d_2,
-                    'Separation_2D_2_kpc_com': separation_2d_2,
-                    'Neighbour2BH_pynbody_haloid': neighbor2.get('pynbody_haloid', np.nan)
-                })
-
-                cross_separation_dict = {
-                    'Separation_3D_12_kpc_com': separation_3d_12,
-                    'Separation_2D_12_kpc_com': separation_2d_12
-                }
-
-                triple_system = {**bh.to_dict(), **bh_env,
-                                 **neighbor1_dict, **neighbor1_env,
-                                 **neighbor2_dict, **neighbor2_env,
-                                 **cross_separation_dict}
-                triple_systems.append(triple_system)
-
+            
+            # Mark all three BHs as assigned
+            assigned_bhs.add(bh['BH_id'])
+            assigned_bhs.add(neighbor1['BH_id'])
+            assigned_bhs.add(neighbor2['BH_id'])
+            
+            # Compute separations
+            dx1 = bh['BH_x'] - neighbor1['BH_x']
+            dy1 = bh['BH_y'] - neighbor1['BH_y']
+            dz1 = bh['BH_z'] - neighbor1['BH_z']
+            separation_3d_1 = np.sqrt(dx1**2 + dy1**2 + dz1**2)
+            separation_2d_1 = np.sqrt(dx1**2 + dy1**2)
+            
+            dx2 = bh['BH_x'] - neighbor2['BH_x']
+            dy2 = bh['BH_y'] - neighbor2['BH_y']
+            dz2 = bh['BH_z'] - neighbor2['BH_z']
+            separation_3d_2 = np.sqrt(dx2**2 + dy2**2 + dz2**2)
+            separation_2d_2 = np.sqrt(dx2**2 + dy2**2)
+            
+            # Separation between the two neighbors
+            dx12 = neighbor1['BH_x'] - neighbor2['BH_x']
+            dy12 = neighbor1['BH_y'] - neighbor2['BH_y']
+            dz12 = neighbor1['BH_z'] - neighbor2['BH_z']
+            separation_3d_12 = np.sqrt(dx12**2 + dy12**2 + dz12**2)
+            separation_2d_12 = np.sqrt(dx12**2 + dy12**2)
+            
+            # Compute local environments
+            bh_env = compute_bh_local_env(sim, bh_pos, t_now, t_prev)
+            
+            neighbor1_env = compute_bh_local_env(
+                sim,
+                [neighbor1['BH_x'], neighbor1['BH_y'], neighbor1['BH_z']],
+                t_now,
+                t_prev
+            )
+            neighbor1_env = {f'Neighbour1{key}': val for key, val in neighbor1_env.items()}
+            
+            neighbor2_env = compute_bh_local_env(
+                sim,
+                [neighbor2['BH_x'], neighbor2['BH_y'], neighbor2['BH_z']],
+                t_now,
+                t_prev
+            )
+            neighbor2_env = {f'Neighbour2{key}': val for key, val in neighbor2_env.items()}
+            
+            # Create dictionaries for neighbors
+            neighbor1_dict = {f'Neighbour1{col}': neighbor1[col] for col in df.columns 
+                            if col.startswith('BH_') or col == 'BH_id'}
+            neighbor1_dict.update({
+                'Separation_3D_1_kpc': separation_3d_1,
+                'Separation_2D_1_kpc': separation_2d_1,
+                'Neighbour1BH_pynbody_haloid': neighbor1['pynbody_haloid']
+            })
+            
+            neighbor2_dict = {f'Neighbour2{col}': neighbor2[col] for col in df.columns 
+                            if col.startswith('BH_') or col == 'BH_id'}
+            neighbor2_dict.update({
+                'Separation_3D_2_kpc': separation_3d_2,
+                'Separation_2D_2_kpc': separation_2d_2,
+                'Neighbour2BH_pynbody_haloid': neighbor2['pynbody_haloid']
+            })
+            
+            # Add separation between neighbors
+            cross_separation_dict = {
+                'Separation_3D_12_kpc': separation_3d_12,
+                'Separation_2D_12_kpc': separation_2d_12
+            }
+            
+            # Combine all data
+            triple_system = {**bh.to_dict(), **bh_env, 
+                           **neighbor1_dict, **neighbor1_env,
+                           **neighbor2_dict, **neighbor2_env,
+                           **cross_separation_dict}
+            triple_systems.append(triple_system)
+            
         elif len(neighbors) > 2:
-            # optionally skip crowded regions
-            print(f'More than 2 neighbors ({len(neighbors)}) near BH {bh["BH_id"]} - skipping')
+            print(f'More than 2 AGN neighbors ({len(neighbors)}) detected near BH {bh["BH_id"]} - skipping')
 
     print(f"Total triple AGN systems found: {len(triple_systems)}")
     return pd.DataFrame(triple_systems)
@@ -212,7 +231,7 @@ def find_triple_agn_systems(df, sim, t_now, t_prev, separation_threshold=30, mdo
 ##############################################
 # STEP 6: Compute halo properties (main and neighbors)
 ##############################################
-def compute_halo_environment_properties(sim, halo_ids, t_now, t_prev, z):
+def compute_halo_environment_properties(sim, halo_ids, t_now, t_prev):
     print('step6')
     h = sim.halos(ahf_mpi=True)
     results = []
@@ -233,57 +252,49 @@ def compute_halo_environment_properties(sim, halo_ids, t_now, t_prev, z):
         except Exception:
             continue
 
-    a = 1.0 / (1.0 + z)  # scale factor
-
     for haloid in halo_ids_clean:
         try:
-            # center in physical kpc
-            center_phys = pnb.analysis.halo.center(h[haloid], mode='pot', retcen=True).in_units('kpc')
+            center = pnb.analysis.halo.center(h[haloid], mode='pot', retcen=True).in_units('kpc')
             virovdens = cos.Delta_vir(sim)
             rdict = {'vir': virovdens, '200': 200, '500': 500, '2500': 2500}
-            MassRadii = cR.get_radius(h[haloid], list(rdict.values()), prop=sim.properties, cen=center_phys)
+            MassRadii = cR.get_radius(h[haloid], list(rdict.values()), prop=sim.properties, cen=center)
 
             def compute_sfr(sub):
                 newstars = sub.s['tform'] > t_prev
                 return sub.s['mass'][newstars].sum() / ((t_now - t_prev) * 1e9)
 
-            # select subregions: radii provided are comoving (25,30,50 comoving kpc)
-            sub25 = h[haloid][pnb.filt.Sphere(25 * a, center_phys)]
-            sub30 = h[haloid][pnb.filt.Sphere(30 * a, center_phys)]
-            sub50 = h[haloid][pnb.filt.Sphere(50 * a, center_phys)]
+            sub25 = h[haloid][pnb.filt.Sphere(25, center)]
+            sub30 = h[haloid][pnb.filt.Sphere(30, center)]
+            sub50 = h[haloid][pnb.filt.Sphere(50, center)]
 
             def half_mass_radius():
-                # MassRadii[1][200.0] is physical; search in physical radii
                 radii = np.linspace(0.1, 0.3 * MassRadii[1][200.0], 100)
                 masses = []
                 for r in radii:
-                    mass = h[haloid][pnb.filt.Sphere(r, center_phys)].s['mass'].sum()
+                    mass = h[haloid][pnb.filt.Sphere(r, center)].s['mass'].sum()
                     masses.append(mass)
                 masses = np.array(masses)
                 total_mass = masses[-1]
                 half_mass = total_mass / 2
                 idx = np.where(masses >= half_mass)[0][0]
-                return 4.0 * radii[idx]  # returns physical kpc
+                return 4.0 * radii[idx]
 
-            Rgal_phys = half_mass_radius()
-            subgal = h[haloid][pnb.filt.Sphere(Rgal_phys, center_phys)]
-
-            # convert centers and radii to comoving for output (comoving = physical * (1+z))
-            center_com = center_phys * (1.0 + z)
+            Rgal = half_mass_radius()
+            subgal = h[haloid][pnb.filt.Sphere(Rgal, center)]
 
             results.append({
                 'Halo_id': int(haloid),
-                'Halo_center_x': center_com[0],
-                'Halo_center_y': center_com[1],
-                'Halo_center_z': center_com[2],
+                'Halo_center_x': center[0],
+                'Halo_center_y': center[1],
+                'Halo_center_z': center[2],
                 'Halo_Mvir': MassRadii[0][virovdens],
-                'Halo_Rvir': MassRadii[1][virovdens] * (1.0 + z),
+                'Halo_Rvir': MassRadii[1][virovdens],
                 'Halo_M200': MassRadii[0][200.0],
-                'Halo_R200': MassRadii[1][200.0] * (1.0 + z),
+                'Halo_R200': MassRadii[1][200.0],
                 'Halo_M500': MassRadii[0][500.0],
-                'Halo_R500': MassRadii[1][500.0] * (1.0 + z),
+                'Halo_R500': MassRadii[1][500.0],
                 'Halo_M2500': MassRadii[0][2500.0],
-                'Halo_R2500': MassRadii[1][2500.0] * (1.0 + z),
+                'Halo_R2500': MassRadii[1][2500.0],
                 'Halo_Mstar25': sub25.s['mass'].sum(),
                 'Halo_GasDensity25': sub25.g['mass'].sum(),
                 'Halo_SFR25': compute_sfr(sub25),
@@ -297,7 +308,6 @@ def compute_halo_environment_properties(sim, halo_ids, t_now, t_prev, z):
                 'Halo_MgasRgal': subgal.g['mass'].sum(),
                 'Halo_MstarRgal': subgal.s['mass'].sum(),
                 'Halo_SFRRgal': compute_sfr(subgal),
-                'Halo_Rgal': Rgal_phys * (1.0 + z)  # report comoving
             })
 
         except Exception as e:
@@ -379,25 +389,25 @@ def main(snapshot_index):
     print('loading tangos')
     tangos_df = load_tangos_bh_data(snap, hdf5_path)
     print('calculating bh properties')
-    # changed code: pass `z` into functions and handle empty result
-    matched_bh_df = match_bh_properties(s, tangos_df, z)         # positions -> comoving using z
+    matched_bh_df = match_bh_properties(s, tangos_df)
     print('find triple agn systems')
-    triple_agn_df = find_triple_agn_systems(matched_bh_df, s, t_now, t_prev, z=z)
+    triple_agn_df = find_triple_agn_systems(matched_bh_df, s, t_now, t_prev)
 
     if len(triple_agn_df) == 0:
         print(f"No triple AGN systems found at z={z:.2f}")
+        # Still save an empty catalog
         save_triple_agn_catalog(triple_agn_df, output_path, z)
         return
 
-    # collect halo ids and compute halo properties (pass z)
-    all_halo_ids = pd.unique(triple_agn_df[['pynbody_haloid',
-                                             'Neighbour1BH_pynbody_haloid',
-                                             'Neighbour2BH_pynbody_haloid']].values.ravel())
+    # Get all unique halo IDs from the triple systems
+    all_halo_ids = pd.unique(triple_agn_df[['pynbody_haloid', 
+                                            'Neighbour1BH_pynbody_haloid', 
+                                            'Neighbour2BH_pynbody_haloid']].values.ravel())
+    
+    halo_df = compute_halo_environment_properties(s, all_halo_ids, t_now, t_prev)
 
-    halo_df = compute_halo_environment_properties(s, all_halo_ids, t_now, t_prev, z)
     final_df = merge_agn_with_halos(triple_agn_df, halo_df)
     save_triple_agn_catalog(final_df, output_path, z)
-
 
 if __name__ == "__main__":
     print('start running the main')
