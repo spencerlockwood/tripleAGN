@@ -168,23 +168,7 @@ def compute_halo_environment_properties(sim, halo_ids, t_now, t_prev):
     h = sim.halos(ahf_mpi=True)
     results = []
 
-    # sanitize halo_ids: drop NaN, ensure integers and unique
-    try:
-        halo_ids_arr = np.asarray(halo_ids)
-    except Exception:
-        halo_ids_arr = np.array(list(halo_ids))
-
-    # drop NaNs and convert to ints
-    halo_ids_clean = []
-    for x in np.unique(halo_ids_arr):
-        if pd.isna(x):
-            continue
-        try:
-            halo_ids_clean.append(int(x))
-        except Exception:
-            continue
-
-    for haloid in halo_ids_clean:
+    for haloid in halo_ids:
         try:
             center = pnb.analysis.halo.center(h[haloid], mode='pot', retcen=True).in_units('kpc')
             virovdens = cos.Delta_vir(sim)
@@ -215,7 +199,7 @@ def compute_halo_environment_properties(sim, halo_ids, t_now, t_prev):
             subgal = h[haloid][pnb.filt.Sphere(Rgal, center)]
 
             results.append({
-                'Halo_id': int(haloid),
+                'Halo_id': haloid,
                 'Halo_center_x': center[0],
                 'Halo_center_y': center[1],
                 'Halo_center_z': center[2],
@@ -245,15 +229,8 @@ def compute_halo_environment_properties(sim, halo_ids, t_now, t_prev):
         except Exception as e:
             print(f"Failed halo {haloid}: {e}")
 
-    df = pd.DataFrame(results)
+    return pd.DataFrame(results).drop_duplicates('Halo_id').set_index('Halo_id')
 
-    if df.empty:
-        # return empty dataframe with expected index name
-        return pd.DataFrame(columns=['Halo_id']).set_index('Halo_id')
-    else:
-        return df.drop_duplicates('Halo_id').set_index('Halo_id')
-
-        
 ##############################################
 #'STEP 7: Merge AGN catalog with halo properties (main + neighbor)')
 ##############################################
@@ -303,7 +280,7 @@ def main(snapshot_index):
             '006912','006937','007168','007212','007241','007394','007424','007552','007680','007779','007869','007936',\
             '008192']  
     hdf5_path = "/scratch/stlock/halomap_files/HaloBH-TangosPynbodyMap-R25-snap{}.hdf5"
-    output_path = "/scratch/stlock/dualAGNs/datasets/catalogue_30kpc/DualAGN-Catalog-R25-z{:.2f}.pkl"
+    output_path = "/scratch/stlock/dualAGNs/catalogs/43lum_30kpc/TripleAGN-Catalog-R50-z{:.2f}.pkl"
     sim_path = "/home/stlock/projects/rrg-babul-ad/SHARED/Romulus/cosmo25/"
 
     print('loading snapshots')
