@@ -36,85 +36,38 @@ sim = tangos.get_simulation("cosmo25")
 timestep = sim.timesteps[ts]
 allBHs = timestep.bhs
 allBHs = list(allBHs)
+# halos_query = sim.timesteps[ts].halos
+# halos_list = list(halos_query)
+# num_halos = len(halos_list)
 
 ####################################################################################################
-# Initialize arrays - Use -1 as sentinel for failed lookups (not 0!)
-bh_id = np.full(len(allBHs), -1, dtype=np.int64)
+bh_id = np.zeros(len(allBHs))
 bh_mdot = np.zeros(len(allBHs))
 bh_mass = np.zeros(len(allBHs))
-bh_pnb_haloid = np.full(len(allBHs), -1, dtype=np.int64)
-bh_tng_haloid = np.full(len(allBHs), -1, dtype=np.int64)
-
-# Track failures
-successful_bhs = 0
-failed_bh_info = 0
-failed_host_halo = 0
+bh_pnb_haloid = np.zeros(len(allBHs))
+bh_tng_haloid = np.zeros(len(allBHs))
 
 for j in range(len(allBHs)):
-    if j % 100 == 0:
-        print(f'Processing BH {j}/{len(allBHs)}')
-    
+    print(j)
     try:
-        # Get basic BH properties
         bh_id[j] = allBHs[j].finder_id
         bh_mdot[j] = allBHs[j]['BH_mdot']
         bh_mass[j] = allBHs[j]['BH_mass']
-        
-        # Try to get host halo - this is where most failures occur
-        try:
-            host = allBHs[j]['host_halo']
-            if host is not None:
-                # Use halo_number for both (more reliable for MPI AHF)
-                bh_pnb_haloid[j] = host.halo_number
-                bh_tng_haloid[j] = host.halo_number
-                successful_bhs += 1
-            else:
-                failed_host_halo += 1
-                print(f'BH {j} (ID={bh_id[j]}): host_halo is None')
-        except (AttributeError, KeyError) as e:
-            failed_host_halo += 1
-            print(f'BH {j} (ID={bh_id[j]}): Cannot access host_halo - {e}')
-            
-    except (AttributeError, KeyError) as e:
-        failed_bh_info += 1
-        print(f'BH {j}: Cannot get BH properties - {e}')
-        # Keep bh_id as -1 to mark complete failure
+        bh_pnb_haloid[j] = allBHs[j]['host_halo'].finder_id
+        bh_tng_haloid[j] = allBHs[j]['host_halo'].halo_number
+    except:
+        print('No BH info')
+        pass
 
 ####################################################################################################
-print('\n' + '='*80)
-print('SUMMARY')
-print('='*80)
-print(f'Total BHs processed: {len(allBHs)}')
-print(f'Successful (with halo): {successful_bhs}')
-print(f'Failed to get host_halo: {failed_host_halo}')
-print(f'Failed to get BH properties: {failed_bh_info}')
-print(f'Success rate: {100.0 * successful_bhs / len(allBHs):.1f}%')
+hf = h5py.File('/scratch/stlock/dualAGNs/halomap_files/HaloBH-TangosPynbodyMap-R25-snap{0}.hdf5'.format(snap), 'w')
 
-# Count valid BHs (those with bh_id != -1 AND halo_id != -1)
-valid_bhs = (bh_id != -1) & (bh_pnb_haloid != -1)
-print(f'\nBHs with both valid ID and halo: {valid_bhs.sum()}')
-print(f'BHs with valid ID but no halo: {((bh_id != -1) & (bh_pnb_haloid == -1)).sum()}')
-print('='*80 + '\n')
-
-####################################################################################################
-# Save to HDF5
-output_file = f'/scratch/stlock/halomap_files_fixed/HaloBH-TangosPynbodyMap-R25-snap{snap}.hdf5'
-hf = h5py.File(output_file, 'w')
 
 hf.create_dataset('pynbody_haloid', data=bh_pnb_haloid)
 hf.create_dataset('tangos_haloid', data=bh_tng_haloid)
+
 hf.create_dataset('BH_id', data=bh_id)
 hf.create_dataset('BH_mdot', data=bh_mdot)
 hf.create_dataset('BH_mass', data=bh_mass)
 
-# Add metadata
-hf.attrs['snapshot'] = snap
-hf.attrs['timestep'] = ts
-hf.attrs['total_bhs'] = len(allBHs)
-hf.attrs['successful_bhs'] = successful_bhs
-hf.attrs['failed_host_halo'] = failed_host_halo
-hf.attrs['failed_bh_info'] = failed_bh_info
-
 hf.close()
-
-print(f'Saved to: {output_file}')

@@ -27,4 +27,4 @@ OUTPUT='/scratch/stlock/tripleAGNs/outputs/'
 
 
 
-srun python -u -m mpi4py /home/stlock/tripleAGN/scripts/Halomap_dual.py ${DATA_FOLDER} ${SLURM_ARRAY_TASK_ID} &> ${OUTPUT}/output_${SLURM_JOB_ID}.log
+srun python -u -m mpi4py /home/stlock/tripleAGN/scripts/Halomap.py ${DATA_FOLDER} ${SLURM_ARRAY_TASK_ID} &> ${OUTPUT}/output_${SLURM_JOB_ID}.log

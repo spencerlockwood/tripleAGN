@@ -17,8 +17,7 @@
 module --force purge
 module load StdEnv/2023 gcc/12.3 openmpi/4.1.5
 source /home/stlock/.venvs/romulus_env/bin/activate
-# Define output directory
+
 OUTPUT='/scratch/stlock/dualAGNs/outputs/'
 
-# Run the Python script and redirect output
 python -u /home/stlock/tripleAGN/scripts/build_dualagn_catalog.py ${SLURM_ARRAY_TASK_ID} &> ${OUTPUT}/output_${SLURM_JOB_ID}.log
